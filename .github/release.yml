@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+
+permissions: write-all
+
+jobs:
+  release:
+    runs-on: [self-hosted, engines]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          submodules: "recursive"
+          fetch-depth: 0
+
+      - name: Git Semantic Version
+        uses: PaulHatch/semantic-version@v5.0.3
+        with:
+          major_pattern: "major:"
+          minor_pattern: "feat:"
+        id: version
+
+      - name: Create New Format Version
+        env:
+          PROD_VERSION: "${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}.${{ steps.version.outputs.patch}}"
+          DEV_VERSION: "${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }}.${{ steps.version.outputs.patch }}-${{github.ref_name}}.${{ steps.version.outputs.increment }}"
+        run: |
+          echo "${{steps.version.outputs.version}}"
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "NEW_VERSION=${{ env.PROD_VERSION }}" >> $GITHUB_ENV
+          else
+            echo "NEW_VERSION=${{ env.DEV_VERSION }}" >> $GITHUB_ENV
+          fi
+
+#      - name: Extract component name and version from tag
+#        id: variables
+#        run: |
+#          REGISTRY_URL=${{ steps.login-ecr.outputs.registry }}
+#          REPO=${{ github.repository }}
+#          PROJECT_NAME="${REPO#*/}"
+#          COMPONENT_VERSION=$(git rev-parse --short HEAD)
+#
+#          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
+#          echo "REGISTRY_URL=$REGISTRY_URL" >> $GITHUB_ENV
+#          echo "DOCKERFILE_TAG=$DOCKERFILE_TAG" >> $GITHUB_ENV
+#
+#          echo "Extracted PROJECT_NAME=$PROJECT_NAME"
+#          echo "Extracted REGISTRY_URL=$REGISTRY_URL"
+#          echo "Extracted DOCKERFILE_TAG=$DOCKERFILE_TAG"
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+            
+      - name: Build and push Docker images
+          id: push
+          uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+          with:
+            context: .
+            push: true
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Create Git Tag
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_ACTIONS_TOKEN }}
+        run: |
+          git config --local user.name "Github Action"
+          git config --local user.email "devops@thinkalpha.io"
+          git tag -a v${{ env.NEW_VERSION }} -m "Version v${{ env.NEW_VERSION }}"
+
+      - name: Push changes
+        if: always()
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GH_ACTIONS_TOKEN }}
+          branch: ${{github.ref_name}}
+          force: true
+          tags: true
