@@ -35,22 +35,6 @@ jobs:
             echo "NEW_VERSION=${{ env.DEV_VERSION }}" >> $GITHUB_ENV
           fi
 
-#      - name: Extract component name and version from tag
-#        id: variables
-#        run: |
-#          REGISTRY_URL=${{ steps.login-ecr.outputs.registry }}
-#          REPO=${{ github.repository }}
-#          PROJECT_NAME="${REPO#*/}"
-#          COMPONENT_VERSION=$(git rev-parse --short HEAD)
-#
-#          echo "PROJECT_NAME=$PROJECT_NAME" >> $GITHUB_ENV
-#          echo "REGISTRY_URL=$REGISTRY_URL" >> $GITHUB_ENV
-#          echo "DOCKERFILE_TAG=$DOCKERFILE_TAG" >> $GITHUB_ENV
-#
-#          echo "Extracted PROJECT_NAME=$PROJECT_NAME"
-#          echo "Extracted REGISTRY_URL=$REGISTRY_URL"
-#          echo "Extracted DOCKERFILE_TAG=$DOCKERFILE_TAG"
-
       - name: Log in to the Container registry
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
         with:
@@ -84,7 +68,7 @@ jobs:
       - name: Create Git Tag
         if: always()
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_ACTIONS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.name "Github Action"
           git config --local user.email "devops@thinkalpha.io"
@@ -94,7 +78,7 @@ jobs:
         if: always()
         uses: ad-m/github-push-action@master
         with:
-          github_token: ${{ secrets.GH_ACTIONS_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{github.ref_name}}
           force: true
           tags: true
